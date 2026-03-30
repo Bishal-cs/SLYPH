@@ -8,7 +8,7 @@ import time
 from config import (
     GROQ_API_KEYS,
     GROQ_MODEL,
-    JARVIS_SYSTEM_PROMPT,
+    SYLPH_SYSTEM_PROMPT,
     GENERAL_CHAT_ADDENDUM
 )
 from app.services.vector_store import VectorStoreService
@@ -197,7 +197,7 @@ class GroqService:
             _log_timing("vector_db", time.perf_counter() - t0)
         
         time_info = get_time_information()
-        system_message = JARVIS_SYSTEM_PROMPT
+        system_message = SYLPH_SYSTEM_PROMPT
         system_message += f"\n\nCurrent time and date: {time_info}"
 
         if context:

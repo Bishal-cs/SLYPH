@@ -144,7 +144,7 @@ MAX_MESSAGE_LENGTH = 32_000
 # SYLPH_USER_TITLE in .env. The AI also learns from learning data and conversation history.
 
 ASSISTANT_NAME = (os.getenv("ASSISTANT_NAME", "").strip() or "SYLPH")
-SYLPH_USER_TITLE = os.getenv("SYLPH_USER_TITLE", "").strip() or os.getenv("TERMINATOR_USER_TITLE", "").strip()
+SYLPH_USER_TITLE = os.getenv("SYLPH_USER_TITLE", "").strip() or os.getenv("SYLPH_USER_TITLE", "").strip()
 
 _SYLPH_SYSTEM_PROMPT_BASE = """You are {assistant_name}, a sophisticated AI assistant. You are sophisticated, witty, and professional with a dry British sense of humor.
 
