@@ -56,26 +56,26 @@ class ChatServices:
 # ---------------------------------------------------------------------------
 # SESSION LOAD / VALIDATE /GET-OR-CREATE
 # --------------------------------------------------------------------------- 
-    def load_session_from_disk(self,session_id: str) -> bool:
+    def load_session_from_disk(self, session_id: str) -> bool:
         """
-        Load a Session From database/chats_data/ if a file for this session_id exists.
+        Load a session from database/chats_data/ if a file for this session_id exists.
 
         File name is chat_{safe_session_id}.json where safe_session_id has dashes/spaces removed.
-        on success we put the messages into self.session{session_id} so later request use them.
-        Return ture if loaded, False if file missing unreadable.
+        On success we put the messages into self.sessions[session_id] so later requests use them.
+        Return true if loaded, False if file missing or unreadable.
         """      
 
-        # Sanitize Id For use Filename (no_dashes or spaces)
+        # Sanitize ID for use in filename (no dashes or spaces)
         safe_session_id = session_id.replace("-", "").replace(" ","_")
         filename = f"chat_{safe_session_id}.json"
         filepath = CHATS_DATA_DIR / filename
 
-        if not filename.expandtabs():
+        if not filepath.exists():
             return False
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 chat_dict = json.load(f)
-            # Convert stored dicts back ChatMessage Ogjects.
+            # Convert stored dicts back to ChatMessage objects.
             messages = [
                 ChatMessage(role=msg.get("role"), content=msg.get("content"))
                 for msg in chat_dict.get("messages", [])
@@ -83,43 +83,43 @@ class ChatServices:
             self.sessions[session_id] = messages
             return True
         except Exception as e:
-            logger.warning("Failed to load session %s from Disk: %s", session_id, e)
+            logger.warning("Failed to load session %s from disk: %s", session_id, e)
             return False
-    def Validate_session_id(self, session_id: str) -> bool:
+    def validate_session_id(self, session_id: str) -> bool:
         """
-        ReTurn True if session_id is safe to use (non-empty, no path traversal, length  <= 255).
-        used To reject malilcious or invalid IDs before we use im file paths.
+        Return True if session_id is safe to use (non-empty, no path traversal, length <= 255).
+        Used to reject malicious or invalid IDs before we use them in file paths.
         """
         if not session_id or not session_id.strip():
             return False
-        # Black Path Traversal and path separators.
+        # Block path traversal and path separators.
         if ".." in session_id or "/" in session_id or "\\" in session_id:
             return False
         if len(session_id) > 255:
             return False
+        return True
     
-    #def get_or_create_session(self, session_id: Optional[str] = None) -> str:
-    def get_or_create_session(self, request, session_id=None):
+    def get_or_create_session(self, session_id: Optional[str] = None) -> str:
         """
-        ReTurn a Session ID and ensure that session exists in memory.
+        Return a session ID and ensure that session exists in memory.
 
-        -if session_id is None: Create a new session with a new UNID and return it.
-        -if session_id is Provided: validate it; if's self.session return if;
-            else try to load form disk; if not found, create a new session with the ID.
+        - If session_id is None: Create a new session with a new UUID and return it.
+        - If session_id is provided: Validate it; if it's in self.sessions, return it;
+          else try to load from disk; if not found, create a new session with the ID.
         Raises ValueError if session_id is invalid (empty, path traversal, or too long).
         """
         
         if not session_id:
-            new_sessions_id=str(uuid.uuid4())
-            self.sessions[new_sessions_id] = []
-            return new_sessions_id
+            new_session_id = str(uuid.uuid4())
+            self.sessions[new_session_id] = []
+            return new_session_id
         
         
 
-        if not self.Validate_session_id(session_id):
+        if not self.validate_session_id(session_id):
             raise ValueError(
-                f"Invalid session_id format: {session_id}. session Id must be non-empty, "
-                "not contation path traveral chatacters, and to under 255 charachares."
+                f"Invalid session_id format: {session_id}. Session ID must be non-empty, "
+                "not contain path traversal characters, and be under 255 characters."
             )
         if session_id in self.sessions:
             return session_id
@@ -127,7 +127,7 @@ class ChatServices:
         if self.load_session_from_disk(session_id):
             return session_id
         
-        # New session with this ID (e.g Client sent an ID that was naver saved).
+        # New session with this ID (e.g client sent an ID that was never saved).
         self.sessions[session_id] = []
         return session_id
     
@@ -147,20 +147,20 @@ class ChatServices:
         self.sessions[session_id].append(ChatMessage(role=role, content=content))
     
     def get_chat_history(self, session_id: str) -> List[ChatMessage]:
-        """ReTurn the list at message for this session (Chronological). Empty list if session unknown."""
-        return self.sessions.get(session_id)
+        """Return the list of messages for this session (chronological). Empty list if session unknown."""
+        return self.sessions.get(session_id, [])
     
-    def format_history_list(self, session_id: str, exclude_last:bool = False) -> List[tuple]:
+    def format_history_list(self, session_id: str, exclude_last: bool = False) -> List[tuple]:
         """
-        build a list of (user_text, assisitant_text) parirs for the LLM prompt.
+        Build a list of (user_text, assistant_text) pairs for the LLM prompt.
 
-        we only include complete parits aand cap at MAX_CHAT_HISTORY_TURNS (e.g. 20)
-        so the prompt does not grow unbeunded. if exclude_last is True we drop the
-        last message (the current user message that we are about is reply to).
+        We only include complete pairs and cap at MAX_CHAT_HISTORY_TURNS (e.g. 20)
+        so the prompt does not grow unbounded. If exclude_last is True we drop the
+        last message (the current user message that we are about to reply to).
         """
         messages = self.get_chat_history(session_id)
         history = []
-        # if exclude_last, we skip the last message (the current user message we are about reply to).
+        # If exclude_last, we skip the last message (the current user message we are about to reply to).
         messages_to_process = messages[:-1] if exclude_last and messages else messages
         i = 0
         while i < len(messages_to_process) - 1:
@@ -171,7 +171,7 @@ class ChatServices:
                 i += 2
             else:
                 i += 1
-        # Keep only the most recent turns so the does not exceed token limilts.
+        # Keep only the most recent turns so the prompt does not exceed token limits.
         if len(history) > MAX_CHAT_HISTORY_TURNS:
             history = history[-MAX_CHAT_HISTORY_TURNS:]
         return history
@@ -183,7 +183,7 @@ class ChatServices:
 
     def process_message(self, session_id: str, user_message: str) -> str:
         """
-        Handle one gerneal-chat message: add user message, call Groq (no web search), add reply, return it.
+        Handle one general chat message: add user message, call Groq (no web search), add reply, return it.
         """
         self.add_message(session_id, "user", user_message)
         chat_history = self.format_history_list(session_id, exclude_last=True)
@@ -202,28 +202,28 @@ class ChatServices:
     def process_realtime_message(self, session_id: str, user_message: str) -> str:
         """
         Handle one realtime message: add user message, call realtime service (Tavily + Groq), add reply, return it.
-        Uses The same session as process_message so histroy is shared. Raises ValueError if realtime_service is None.
+        Uses the same session as process_message so history is shared. Raises ValueError if realtime_service is None.
         """
 
         if not self.realtime_service:
-            raise ValueError("Realtime Sevice is not initiallized. connot process realtime Queries")
+            raise ValueError("Realtime Service is not initialized. Cannot process realtime queries")
         self.add_message(session_id, "user", user_message)
         chat_history = self.format_history_list(session_id, exclude_last=True)
-        response = self.realtime_service.get_response(user_message,chat_history=chat_history)
+        response = self.realtime_service.get_response(user_message, chat_history=chat_history)
         self.add_message(session_id, "assistant", response)
         return response
     
     # -------------------------------------------------------------------------------
-    # Presist sesstion to dise
+    # Persist session to disk
     # -------------------------------------------------------------------------------
 
     def save_chat_session(self, session_id: str):
         """
         Write this session's messages to database/chats_data/chat_{safe_id}.json.
 
-        called after each message so the conversation to persisted. The vector store
-        is rebuild on startup from these files, so new chats are included after restart.
-        if the sesion is missing or empty we do nothing. On write error as only log.
+        Called after each message so the conversation is persisted. The vector store
+        is rebuilt on startup from these files, so new chats are included after restart.
+        If the session is missing or empty we do nothing. On write error we only log.
         """
         if session_id not in self.sessions or not self.sessions[session_id]:
             return
@@ -234,11 +234,11 @@ class ChatServices:
         filepath = CHATS_DATA_DIR / filename
         chat_dict = {
             "session_id": session_id,
-            "messages": [{"role": msg.role, "content":msg.content} for msg in messages]
+            "messages": [{"role": msg.role, "content": msg.content} for msg in messages]
         }
 
         try:
-            with open(filepath, "w",encoding="utf-8") as f:
-                json.dump(chat_dict,f,indent=2,ensure_ascii=False)
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(chat_dict, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error("Falied to save chat session %s to disk: %s", session_id,e)
+            logger.error("Failed to save chat session %s to disk: %s", session_id, e)

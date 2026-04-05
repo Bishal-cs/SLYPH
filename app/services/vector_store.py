@@ -68,9 +68,9 @@ class VectorStoreService:
 
 
   def load_learning_data(self) -> List[Document]:
-    """Read all .txt files in database/learning_data/ and return one Document per file (content + source name). """
+    """Read all .txt files in database/learning_data/ and return one Document per file (content + source name)."""
     documents = []
-    for file_path in list(LEARNING_DATA_DIR.glob("*. txt")):
+    for file_path in list(LEARNING_DATA_DIR.glob("*.txt")):
       try:
         with open(file_path, "r", encoding="utf-8") as f:
           content = f.read().strip()
@@ -83,7 +83,8 @@ class VectorStoreService:
   def load_chat_history(self) -> List[Document]:
     """Load all .json files in database/chats_data/; turn each into one Document (User:/Assistant: lines)."""
     documents = []
-    for file_path in list(CHATS_DATA_DIR.glob(" *. json")):
+    for file_path in list(CHATS_DATA_DIR.glob("*.json")):
+
       try:
         with open(file_path, "r", encoding="utf-8") as f:
           chat_data = json.load(f)

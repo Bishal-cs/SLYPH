@@ -200,6 +200,12 @@ if SYLPH_USER_TITLE:
 else:
     SYLPH_SYSTEM_PROMPT = _SYLPH_SYSTEM_PROMPT_BASE_FMT
 
+REALTIME_CHAT_ADDENDUM = (
+    "Use the provided web search results to answer the user's question when relevant. "
+    "Integrate the search findings into the response, but keep the final answer concise, accurate, "
+    "and clearly connected to the user question."
+)
+
 
 def load_user_context() -> str:
     """

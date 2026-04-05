@@ -54,8 +54,11 @@
  * current page, making the frontend deployment-agnostic (no hardcoded URLs).
  */
 const API = (typeof window !== 'undefined' && window.location.origin)
-    ? window.location.origin
-    : 'http://localhost:8000';
+    ? `${window.location.origin}/api`
+    : 'http://localhost:8000/api';
+
+// Health-check polling interval ID (used to avoid repeated failures showing temporary state as offline)
+let healthCheckInterval = null;
 
 /* ================================================================
    APPLICATION STATE
@@ -485,6 +488,8 @@ function init() {
     preloadStarterAudio();   // Pre-load MP3s for instant playback
     preStarterPlayer = new PreStarterPlayer();   // Dedicated player for pre-starter (immune to ttsPlayer.reset)
     checkHealth();
+    if (healthCheckInterval) clearInterval(healthCheckInterval);
+    healthCheckInterval = setInterval(checkHealth, 5000);
     bindEvents();
     setMode(currentMode);   // Sync mode slider, labels, and activity toggle
     autoResizeInput();
@@ -624,7 +629,14 @@ function isSafariOrIOS() {
  */
 function initSpeech() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { micBtn.title = 'Speech not supported in this browser'; return; }
+    if (!SR) {
+        if (micBtn) {
+            micBtn.title = 'Speech not supported in this browser';
+            micBtn.disabled = true;
+            micBtn.classList.remove('auto-listen');
+        }
+        return;
+    }
 
     recognition = new SR();
 
@@ -673,12 +685,23 @@ function initSpeech() {
         if (isPermissionDenied && micBtn) {
             micBtn.title = 'Microphone access denied. Allow in browser settings.';
             speechErrorRetryCount = SPEECH_ERROR_MAX_RETRIES;
+            showToast('Microphone permission denied. Please allow access in browser settings.');
         }
         if (autoListenMode && !isStreaming && speechErrorRetryCount < SPEECH_ERROR_MAX_RETRIES) {
             speechErrorRetryCount++;
             setTimeout(() => maybeRestartListening(), SPEECH_RESTART_DELAY_MS);
         } else if (speechErrorRetryCount >= SPEECH_ERROR_MAX_RETRIES && micBtn) {
             micBtn.title = 'Voice input — click to try again';
+        }
+    };
+
+    recognition.onnomatch = () => {
+        // No speech recognized in this segment; allow the user to try again.
+        showToast('No speech detected. Please speak clearly into the microphone.');
+        if (autoListenMode && !isStreaming) {
+            setTimeout(() => {
+                if (!isListening) startListening();
+            }, SPEECH_RESTART_DELAY_MS);
         }
     };
 

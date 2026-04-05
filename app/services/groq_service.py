@@ -2,22 +2,22 @@
 GROQ SERVICE MODULE
 ===================
 
-This Module Handel general chat: no web search, only the Groq LLM plus contest
-From the vector store (learning datas + Pasts chats).Used By ChatService for
+This module handles general chat: no web search, only the Groq LLM plus context
+from the vector store (learning data + past chats). Used by ChatService for
 POST /chat.
 
-MULIPLE API KEYS (round-robin and fallback):
-    - You can Set multiple Groq API Key in .evn: Groq_api_key, Groq_api_key_2,
-        Groq_api_key_3, ....(no limlit).
-    - Each request uses one key in rotation: 1st request -> 1st key, 2nd request->
-        2nd key. 3rd request -> 3rd key, then back to 1st key, and so on. Every key
-        if used one-by-one so usage is spread across keys.
-    - The Round-robin counter is shared across all instances (Groqservice and
-        RealtimeGroqService), so Both /chat and /chat/realtime endpoint use the 
-        same rotaion seaqunce.
-    - If the Chouses key fails (rate limit 429 or any error), we try the next key,
-        then the next, until one sucesseds or all have been tried.
-    - All API key Usage in logged with maskef keys (first 8 and last 4 chars visible)
+MULTIPLE API KEYS (round-robin and fallback):
+    - You can set multiple Groq API keys in .env: GROQ_API_KEY, GROQ_API_KEY_2,
+        GROQ_API_KEY_3, .... (no limit).
+    - Each request uses one key in rotation: 1st request -> 1st key, 2nd request ->
+        2nd key, 3rd request -> 3rd key, then back to 1st key, and so on. Every key
+        is used one-by-one so usage is spread across keys.
+    - The round-robin counter is shared across all instances (GroqService and
+        RealtimeGroqService), so both /chat and /chat/realtime endpoints use the 
+        same rotation sequence.
+    - If the chosen key fails (rate limit 429 or any error), we try the next key,
+        then the next, until one succeeds or all have been tried.
+    - All API key usage is logged with masked keys (first 8 and last 4 chars visible)
         for security and debugging purposes.
 Follow:
     1. get_response(question, chat_histroy) is called
@@ -84,6 +84,11 @@ def _mask_api_key(key: str) -> str:
         return "***masked***"
     return f"{key[:8]}...{key[-4]}"
 
+
+class AllGroqApisFailedError(Exception):
+    """Raised when all configured Groq API keys fail during a request."""
+    pass
+
 # ===============================================================================
 # GROQ SERVICE CLASS
 # ===============================================================================
@@ -134,6 +139,7 @@ class GroqService:
             prompt: ChatPromptTemplate,
             messages: list,
             question: str,
+            key_start_index: Optional[int] = None,
     ) -> str:
         """
         Call the LLM using the next in rotation; on failure, try the next key until one success.
@@ -145,11 +151,15 @@ class GroqService:
         """
 
         n = len(self.llms)
-        # Which key try First for this request (round-rabin: request 1 -> key 0, request 2 -> key 1, ...).
-        # Use Class-level counter so all instances (GroqService and RealtimeGroqService) Share the same rotation.
-        start_i = GroqService._shared_key_index % n
-        current_key_index = GroqService._shared_key_index
-        GroqService._shared_key_index += 1
+        # Which key to try first for this request.
+        # If the caller provides a start index, honor it; otherwise use the shared round-robin counter.
+        if key_start_index is None:
+            start_i = GroqService._shared_key_index % n
+            current_key_index = GroqService._shared_key_index
+            GroqService._shared_key_index += 1
+        else:
+            start_i = key_start_index % n
+            current_key_index = key_start_index
 
         # Log Which key we're using (masked for security)
         masked_key = _mask_api_key(GROQ_API_KEYS[start_i])
@@ -185,7 +195,7 @@ class GroqService:
         # All keys ware tried and all failed; raise the last exection.
         masked_all_keys = ", ".join([_mask_api_key(GROQ_API_KEYS[i]) for i in keys_tried])
         logger.error(f"All api keys failed. tried keys: {masked_all_keys}")
-        raise Exception(f"Error getting response From Groq: {str(last_exc)}") from last_exc
+        raise AllGroqApisFailedError(f"Error getting response From Groq: {str(last_exc)}") from last_exc
     
     def get_response(
             self,
