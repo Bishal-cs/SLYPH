@@ -1313,6 +1313,7 @@ textarea { font-family: var(--font); color: var(--text); }
     word-break: break-word;
     display: -webkit-box;
     -webkit-line-clamp: 4;
+    line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -1575,7 +1576,7 @@ textarea { font-family: var(--font); color: var(--text); }
     .search-results-list { padding: 12px 14px 18px; gap: 10px; }
     .search-result-card { padding: 12px 14px; }
     .search-result-card .card-title { font-size: 0.76rem; }
-    .search-result-card .card-content { font-size: 0.72rem; -webkit-line-clamp: 3; }
+    .search-result-card .card-content { font-size: 0.72rem; -webkit-line-clamp: 3; line-clamp: 3; }
     .activity-panel { width: 100vw; }
     .activity-header { padding: 12px 14px; }
     .activity-list { padding: 12px 14px 18px; gap: 10px; }
