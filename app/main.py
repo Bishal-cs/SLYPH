@@ -66,7 +66,7 @@ from app.services.chat_service import ChatService
 from app.services.brain_service import BrainService
 from app.services.task_executor import TaskExecutor
 from app.services.vision_service import VisionService
-from app.services.task _manager import TaskManager
+from app.services.task_manager import TaskManager
 
 from config import (
     VECTOR_STORE_DIR, GROQ_API_KEYS, GROQ_MODEL, TAVILY_API_KEY,
