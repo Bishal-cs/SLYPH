@@ -27,9 +27,9 @@ STARTUP:
 """
 
 from curses import raw
-from email.mime import audio
+from email.mime import audio, text
 from pathlib import Path
-from urllib import response
+from urllib import request, response
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, RedirectResponse, Response
@@ -37,6 +37,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from contextlib import asynccontextmanager
+from transformers import data
 import uvicorn
 import logging
 import json
@@ -194,7 +195,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="J.A.R.V.I.S API",
+    title="S.Y.L.P.H API",
     description="Just A Rather Very Intelligent System",
     lifespan=lifespan,
     docs_url=None,
@@ -230,7 +231,7 @@ async def api_info():
             "/chat/stream": "General chat (streaming chunks)",
             "/chat/realtime": "Realtime chat (non-streaming)",
             "/chat/realtime/stream": "Realtime chat (streaming chunks)",
-            "/chat/jarvis/stream": "Jarvis unified route (two-stage brain: classify > route > execute/stream)",
+            "/chat/sylph/stream": "sylph unified route (two-stage brain: classify > route > execute/stream)",
             "/chat/history/{session_id}": "Get chat history",
             "/tasks/{task_id}": "Get background task status and result",
             "/health": "System health check",
@@ -348,7 +349,7 @@ def merge_short(sentences):
         cur = sentences[i]
         j=i+1
 
-        while j < len(sentences) and len(sentences[j].split()) <= MERGE_IF_WORDS:
+        while j < len(sentences) and len(sentences[j].split()) <= _MERGE_IF_WORDS:
             cur = (cur + " " + sentences[j]).strip()
             j += 1
 
@@ -624,30 +625,127 @@ async def chat_realtime_stream(request: ChatRequest):
         logger.error("[API /chat/realtime/stream] Error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/chat/jarvis/stream")
+@app.post("/chat/sylph/stream")
 
-async def chat_jarvis_stream(request: ChatRequest):
+async def chat_sylph_stream(request: ChatRequest):
 
     if not chat_service:
-    raise HTTPException(status_code=503, detail="Service not initialized")
+        raise HTTPException(status_code=503, detail="Service not initialized")
 
-    logger.info("[API /chat/jarvis/stream] Incoming | session_id=%s | message_len=%d | img=%s | message=%.100s",
-    request.session_id or "new", len(request.message), "yes" if request.imgbase64 else "no", request.message)
+    logger.info("[API /chat/sylph/stream] Incoming | session_id=%s | message_len=%d | img=%s | message=%.100s",
+                request.session_id or "new", len(request.message), "yes" if request.imgbase64 else "no", request.message)
 
     try:
-    session_id = chat_service.get_or_create_session(request.session_id)
-    chunk_iter = chat_service.process_jarvis_message_stream(
-    session_id, request.message, imgbase64=request.imgbase64
+        session_id = chat_service.get_or_create_session(request.session_id)
+        chunk_iter = chat_service.process_sylph_message_stream(
+            session_id, request.message, imgbase64=request.imgbase64
+        )
 
-)
+        return StreamingResponse(
+            _stream_generator(session_id, chunk_iter, is_realtime=True, tts_enabled=request.tts),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    except AllGroqApisFailedError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    
+    except Exception as e:
+        if _is_rate_limit_error(e):
+            raise HTTPException(status_code=429, detail=RATE_LIMIT_MESSAGE)
 
-return StreamingResponse(
-_stream_generator(session_id, chunk_iter, is_realtime=True, tts_enabled=request.tts),
-media_type="text/event-stream",
-headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        logger.error("[API /chat/sylph/stream] Error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/tasks/{task_id}")
 
-)
- 
+async def get_task_status(task_id: str):
+    if not task_manager:
+        raise HTTPException(status_code=503, detail="Task manager not initialized")
+
+    if not task_id or len(task_id) > 32:
+        raise HTTPException(status_code=400, detail="Invalid task_id")
+    
+    data = task_manager.get_serializable(task_id)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return data
+
+@app.get("/tasks/{task_id}/image")
+
+async def get_task_image(task_id: str):
+    if not task_manager:
+        raise HTTPException(status_code=503, detail="Task manager not initialized")
+
+    if not task_id or len(task_id) > 32:
+        raise HTTPException(status_code=400, detail="Invalid task_id")
+
+    entry = task_manager.get(task_id)
+
+    if not entry:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if entry. status != "completed" or not entry.image_bytes:
+        raise HTTPException(status_code=404, detail="Image not ready")
+
+    return Response(content=entry.image_bytes, media_type="image/png")
+
+@app.get("/chat/history/{session_id}")
+
+async def get_chat_history(session_id: str):
+    if not chat_service:
+        raise HTTPException(status_code=503, detail="Chat service not initialized")
+
+    if not chat_service.validate_session_id(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session_id format")
+
+    try:
+        messages = chat_service.get_chat_history(session_id)
+        return {
+        "session_id": session_id,
+        "messages": [{"role": msg.role, "content": msg.content} for msg in messages]
+        }
+    
+    except Exception as e:
+        logger.error(f"Error retrieving history: {e}", exc_info=True)
+    raise HTTPException(status_code=500, detail=f"Error retrieving history: {str(e)}")
+
+@app.post("/tts")
+
+async def text_to_speech(request: TTSRequest):
+    text = request. text.strip()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    async def generate():
+        try:
+            communicate = edge_tts.Communicate(text=text, voice=TTS_VOICE, rate=TTS_RATE)
+            async for chunk in communicate. stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
+                    
+        except Exception as e:
+            logger.error("[TTS] Error generating speech: %s", e)
+
+    return StreamingResponse(
+        generate(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"},
+    )
+_frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+
+if _frontend_dir.exists():
+    app.mount("/app", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
+
+@app.get("/")
+async def root_redirect():
+    return RedirectResponse(url="/app/", status_code=302)
 
 def run():
     uvicorn.run(
@@ -657,6 +755,6 @@ def run():
         reload=True,
         log_level="info"
     )
-
+    
 if __name__ == "__main__":
     run()
