@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 import uuid
 
-from app.config import CHATS_DATA_DIR , MAX_CHAT_HISTORY_TURNS
+from config import CHATS_DATA_DIR , MAX_CHAT_HISTORY_TURNS
 from app.models import ChatMessage, ChatHistory
 from app.services.groq_service import GroqService
 from app.services.realtime_service import RealtimeGroqService

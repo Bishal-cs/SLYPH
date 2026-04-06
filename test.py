@@ -35,7 +35,7 @@ from datetime import datetime
 from uuid import uuid4
 
 try:
-    from app.config import ASSISTANT_NAME
+    from config import ASSISTANT_NAME
 except ImportError:
     ASSISTANT_NAME = "SYLPH"
 

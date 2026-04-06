@@ -8,7 +8,7 @@ from app.services.groq_service import GroqService, escape_curly_braces, AllGroqA
 from app.services.vector_store import VectorStoreService
 # from app.utils.time_info import get_time_information
 from app.utils.retry import with_retry
-from app.config import REALTIME_CHAT_ADDENDUM,GROQ_API_KEYS,GROQ_MODEL
+from config import REALTIME_CHAT_ADDENDUM,GROQ_API_KEYS,GROQ_MODEL
 # from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 # from langchain_core.messages import HumanMessage, AIMessage
 

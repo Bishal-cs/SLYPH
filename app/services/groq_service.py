@@ -40,7 +40,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 import logging
 
 
-from app.config import GROQ_API_KEYS, GROQ_MODEL, SYLPH_SYSTEM_PROMPT
+from config import GROQ_API_KEYS, GROQ_MODEL, SYLPH_SYSTEM_PROMPT
 from app.services.vector_store import VectorStoreService
 from app.utils.time_info import get_time_information
 
